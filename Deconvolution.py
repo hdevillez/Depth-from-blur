@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import pywt
 
 from nt_toolbox.general import *
 from nt_toolbox.signal import *
-from nt_toolbox.perform_wavelet_transf import *
 
 """
     Load an image and solve the inverse problem
@@ -12,15 +12,16 @@ f0 = load_image("DFB_artificial_dataset/im0_blurry.bmp")
 sigma = 3.
 
 #show blurred image
-plt.figure(figsize = (12,12))
+plt.figure(figsize = (9,9))
 plt.subplot(211)
 imageplot(f0, 'Image')
 
 #wavelet transform and inverse wavelet transform
-Jmax = np.log2(f0.shape[0])-1
-Jmin = (Jmax-3)
-Psi = lambda a: perform_wavelet_transf(a, Jmin, -1, ti=0)
-PsiS = lambda f: perform_wavelet_transf(f, Jmin, +1, ti=0)
+wavelets = 'sym5'
+g,args = pywt.dwt2(f0, wavelets)
+PsiS = lambda f: pywt.dwt2(f,wavelets)[0]
+Psi = lambda a: pywt.idwt2((a,args), wavelets)
+
 #the linear blur
 Phi = lambda x: gaussian_blur(x, sigma)
 
@@ -30,11 +31,13 @@ SoftThreshPsi = lambda f,T: Psi(SoftThresh(PsiS(f), T))
 
 #optimization
 lmbd = 1e-3/len(f0)
-tau = 1.5
+tau = 1.
 niter = 50
 fSpars = f0
 for iter in range(niter):
+    #gradient step
     fSpars = np.add( fSpars, tau*Phi(f0-Phi(fSpars)))
+    #soft-threshold step
     fSpars = SoftThreshPsi( fSpars, lmbd*tau )
 
 #show result
