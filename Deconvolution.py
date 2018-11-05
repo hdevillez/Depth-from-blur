@@ -9,7 +9,7 @@ from nt_toolbox.signal import *
 """
     Load an image and solve the inverse problem
 """
-f0 = load_image("DFB_artificial_dataset/im0_blurry.bmp")
+f0 = load_image("DFB_artificial_dataset/im1_blurry.bmp")
 
 #wavelet transform and inverse wavelet transform
 wavelets = 'sym5'
