@@ -10,6 +10,10 @@ from nt_toolbox.perform_wavelet_transf import *
     Load an image and solve the inverse problem
 """
 
+def SSD(x,y):
+    """ Sum of square differences """
+    return np.sum((x-y)**2)
+
 def cost(f0, fSpars, Phi):
 
     ## HIGHLY FOIREUX
@@ -32,6 +36,7 @@ def cost(f0, fSpars, Phi):
     return C
     """
 
+    #L1/L2
     Grad = lambda f: (np.abs(f[:,0:-1]-f[:,1:]), np.abs(f[0:-1,:]-f[1:,:]))
     G = Grad(fSpars)#gradient of the image solution along x and y
     L1 = np.sum(np.abs(G[0]))+np.sum(np.abs(G[1]))
@@ -83,7 +88,7 @@ def deconvolution_unknown_scale(f, kernel, options):
     #show J results
     if(options['verbose']):
         plt.figure()
-        plt.plot(scales,J)
+        plt.plot(scales,J,'o')
         plt.title('J-Sigma')
         plt.show()
 
@@ -95,14 +100,34 @@ def deconvolution_unknown_scale(f, kernel, options):
 
     return fSpars
 
+def circular_blur(f,radius):
+    n = max(f.shape);
+    t = np.concatenate( (np.arange(0,n/2+1), np.arange(-n/2,-1)) )
+    [Y,X] = np.meshgrid(t,t)
+    k = (X**2+Y**2)<=radius**2
+    k = k/np.sum(k)
+    return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
+
+
 f0 = load_image("DFB_artificial_dataset/im5_blurry.bmp")
 
 options = {}
 options['verbose'] = True
 
 fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
+
 #scale = 2
 #fSpars = deconvolution(f0, gaussian_blur, scale, options)
+
+if False:
+    radius = 6
+    ftrue = load_image("DFB_artificial_dataset/im2_original.bmp")
+    fSpars2 = deconvolution(f0, circular_blur, radius, options)
+    blindSSD = SSD(fSpars,ftrue)
+    nonBlindSSD = SSD(fSpars2,ftrue)
+    errorRatio = nonBlindSSD/blindSSD
+    print("Error ratio : " + str(errorRatio))
+
 
 #show blurred image
 plt.figure(figsize = (9,9))

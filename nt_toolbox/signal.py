@@ -311,4 +311,3 @@ def plot_dictionary(D, title='Dictionary'):
     imageplot(D)
     plt.title(title)
     plt.show()
-
