@@ -11,15 +11,15 @@ from nt_toolbox.perform_wavelet_transf import *
 """
 
 def cost(f0, fSpars, Phi):
-   
+
     ## HIGHLY FOIREUX
     """
     # define wavelet transform function
     PsiS = lambda f: perform_wavelet_transf(f,0,+1, ti=0)
-   
+
     n = np.shape(f0)[0]
     J = int(np.log2(n)-1)+1
-    
+
     u = [4^(-J), 4**(-np.floor(np.arange(J+2/3,1,-1/3)))];
     a = PsiS(fSpars)
     print(np.shape(a))
@@ -31,10 +31,16 @@ def cost(f0, fSpars, Phi):
     C = Ja + np.sum(np.ravel((f0-Phi(fSpars))**2))/2
     return C
     """
-    return 0
+
+    Grad = lambda f: (np.abs(f[:,0:-1]-f[:,1:]), np.abs(f[0:-1,:]-f[1:,:]))
+    G = Grad(fSpars)#gradient of the image solution along x and y
+    L1 = np.sum(np.abs(G[0]))+np.sum(np.abs(G[1]))
+    L2 = np.sqrt(np.sum(G[0]**2)+np.sum(G[1]**2))
+
+    return L1/L2
 
 def deconvolution(f, kernel, scale, options):
-    
+
     # define wavelet transform and inverse wavelet transform functions
     PsiS = lambda f: perform_wavelet_transf(f,3, +1, ti=1)
     Psi  = lambda a:  perform_wavelet_transf(a,3, -1,ti=1)
@@ -52,24 +58,24 @@ def deconvolution(f, kernel, scale, options):
     niter = 20
     a = PsiS(f0)
     for iter in range(niter):
-        if(options['verbose']): print(cost(f0, a, Phi))
-        
+        #if(options['verbose']): print(cost(f0, Psi(a), Phi))
+
         #gradient step
         a = np.add(a, tau*PsiS(Phi(f0-Phi(Psi(a)))))
         #soft-threshold step
         a = SoftThresh(a, lmbd*tau )
-    
+
     return Psi(a)
 
 def deconvolution_unknown_scale(f, kernel, options):
-    scales = np.linspace(1,5,5)
+    scales = np.linspace(1,10,10)
 
     J = np.zeros(scales.shape)
-    
+
     for i, scale in enumerate(scales):
         #test ith scale
-        fSpars = deconvolution(f, kernel, scale, options) 
-        J[i] = cost(f0, fSpars, lambda x : kernel(x, scale)) 
+        fSpars = deconvolution(f, kernel, scale, options)
+        J[i] = cost(f0, fSpars, lambda x : kernel(x, scale))
 
 
         if(options['verbose']): print('Cost for scale %f : %f' % (scale, J[i]))
@@ -82,21 +88,21 @@ def deconvolution_unknown_scale(f, kernel, options):
         plt.show()
 
     #optimal scale
-    scale = scales[np.argmin(J)] 
-    if(options['verbose']): print('Optimal scale : %f' % scalse)
+    scale = scales[np.argmin(J)]
+    if(options['verbose']): print('Optimal scale : %f' % scale)
 
-    fSpars, _ = deconvolution(f, kernel, scale, options) 
+    fSpars = deconvolution(f, kernel, scale, options)
 
     return fSpars
 
-f0 = load_image("DFB_artificial_dataset/im1_blurry.bmp")
+f0 = load_image("DFB_artificial_dataset/im5_blurry.bmp")
 
 options = {}
 options['verbose'] = True
 
-#fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
-scale = 5 
-fSpars = deconvolution(f0, gaussian_blur, scale, options)
+fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
+#scale = 2
+#fSpars = deconvolution(f0, gaussian_blur, scale, options)
 
 #show blurred image
 plt.figure(figsize = (9,9))
