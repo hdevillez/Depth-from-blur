@@ -15,28 +15,8 @@ def SSD(x,y):
     return np.sum((x-y)**2)
 
 def cost(f0, fSpars, Phi):
-
-    ## HIGHLY FOIREUX
-    """
-    # define wavelet transform function
-    PsiS = lambda f: perform_wavelet_transf(f,0,+1, ti=0)
-
-    n = np.shape(f0)[0]
-    J = int(np.log2(n)-1)+1
-
-    u = [4^(-J), 4**(-np.floor(np.arange(J+2/3,1,-1/3)))];
-    a = PsiS(fSpars)
-    print(np.shape(a))
-    print(u)
-    print(np.shape(np.arrays(u)))
-    Ja = sum([a[i][j] * u[i] for i in range(np.shape(a)[0])] for j in range(np.shape(a)[0]))
-
-    #evaluate the solution with J; L1/L2 and ^2 penalties
-    C = Ja + np.sum(np.ravel((f0-Phi(fSpars))**2))/2
-    return C
-    """
-
-    #L1/L2
+	#Blind Deconvolution Using a Normalized Sparsity Measure, Krishnan, Tay, Fergus
+	#L1/L2
     Grad = lambda f: (np.abs(f[:,0:-1]-f[:,1:]), np.abs(f[0:-1,:]-f[1:,:]))
     G = Grad(fSpars)#gradient of the image solution along x and y
     L1 = np.sum(np.abs(G[0]))+np.sum(np.abs(G[1]))
@@ -109,17 +89,17 @@ def circular_blur(f,radius):
     return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
 
 
-f0 = load_image("DFB_artificial_dataset/im5_blurry.bmp")
+f0 = load_image("DFB_artificial_dataset/im2_blurry.bmp")
 
 options = {}
 options['verbose'] = True
 
-fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
+#fSpars = deconvolution_unknown_scale(f0, circular_blur, options)
 
-#scale = 2
-#fSpars = deconvolution(f0, gaussian_blur, scale, options)
+scale = 4
+fSpars = deconvolution(f0, circular_blur, scale, options)
 
-if False:
+if True:
     radius = 6
     ftrue = load_image("DFB_artificial_dataset/im2_original.bmp")
     fSpars2 = deconvolution(f0, circular_blur, radius, options)
