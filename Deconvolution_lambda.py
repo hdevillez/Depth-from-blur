@@ -27,8 +27,8 @@ def correlation_transform(f,radius):
 
 def whiteness(r):
     # measure the whiteness in the residual r, lower is better (more white)
-    r_norm = r/np.var(r)
-    return 1e-6*np.abs(np.sum(np.multiply(r_norm, correlation_transform(r_norm, 10))))
+    r_norm = r#/np.var(r)
+    return np.abs(np.sum(np.multiply(r_norm, correlation_transform(r_norm, 10))))
 
 def cost(f0, fSpars, Phi):
 	#Blind Deconvolution Using a Normalized Sparsity Measure by Krishnan, Tay and Fergus

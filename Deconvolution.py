@@ -38,8 +38,7 @@ def correlation_transform(f,radius):
 
 def whiteness(r):
     # measure the whiteness in the residual r, lower is better (more white)
-    r_norm = r/np.var(r)
-    return 1e-6*np.abs(np.sum(np.multiply(r_norm, correlation_transform(r_norm, 10))))
+    return np.abs(np.sum(np.multiply(r, correlation_transform(r, 10))))
 
 def deconvolution(f, kernel, scale, options, lmbd=0.01):
 
@@ -72,7 +71,7 @@ def deconvolution(f, kernel, scale, options, lmbd=0.01):
 def deconvolution_adaptativeLambda(f, kernel, scale, options):
     """
         make a search on the lambda value to get a residual as decorrelated as possible
-        Parameter estimation for blind and nonblind deconvolution using residual whiteness measures
+        Parameter estimation for blind and nonblind deconvolution using residual whiteness
     """
     lmbds = np.exp(np.linspace(-11,-2,10))
     W = np. zeros(lmbds.shape)
