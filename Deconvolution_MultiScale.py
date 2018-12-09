@@ -61,7 +61,6 @@ def deconvolution(f0, kernel, scale, options, lmbd=0.01):
     Phi = lambda x: kernel(x, scale)
 
     #optimization
-    #lmbd = 0.01
     tau = 1.5
     niter = 20
     a = PsiS(f0)
@@ -74,6 +73,22 @@ def deconvolution(f0, kernel, scale, options, lmbd=0.01):
         a = SoftThresh(a, lmbd*tau )
 
     return Psi(a)
+
+def deconvolution_3Planes(f0, kernel, C, scales, options, lmbd=0.01):
+    """
+        Apply three deconvolution operations for the three different scale and
+        reconstruct a full result given the partionning in C
+    """
+    fs0 = deconvolution(f0, kernel, scales[0], options, lmbd)
+    fs1 = deconvolution(f0, kernel, scales[1], options, lmbd)
+    fs2 = deconvolution(f0, kernel, scales[2], options, lmbd)
+
+    fs = np.zeros(f0.shape)
+    fs[C==0] = fs0[C==0]
+    fs[C==1] = fs0[C==1]
+    fs[C==2] = fs0[C==2]
+
+    return fs
 
 def deconvolution_adaptativeLambda(f, kernel, scale, options):
     """
@@ -98,28 +113,8 @@ def deconvolution_unknown_scale(f, kernel, options):
     scales = np.linspace(0.1,15,50)
 
     J = np.zeros(scales.shape)
-
-    '''
-    #first version
-    for i, scale in enumerate(scales):
-        #test ith scale
-        fSpars = deconvolution(f, kernel, scale, options)
-        J[i] = L1L2(fSpars)
-
-
-        if(options['verbose']): print('Cost for scale %f : %f' % (scale, J[i]))
-
-    #show J results
-    if(options['verbose']):
-        plt.figure()
-        plt.plot(scales,J,'o')
-        plt.title('$L_1/L_2$ cost')
-        plt.xlabel('$\sigma$')
-        plt.ylabel('$L_1/L_2( I(\sigma) )$')
-        plt.show()
-    '''
-
     for i,scale in enumerate(scales):
+        #test ith scale
         fL = BlurredLaplacian(f0, scale)
         J[i] = L1L2(fL)
 
@@ -148,19 +143,57 @@ options['verbose'] = True
 
 fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
 
-#scale = 3
-#fSpars = deconvolution_adaptativeLambda(f0, gaussian_blur, scale, options)
-#fSpars = deconvolution(f0, gaussian_blur, scale, options)
+#local scale estimation
+#construct padded image f0_ for border estimation
+rSize = 40
+fM = np.mean(f0)
+f0_ = np.vstack((fM*np.ones((rSize,f0.shape[1])), f0, fM*np.ones((rSize,f0.shape[1]))))
+f0_ = np.hstack((fM*np.ones((f0.shape[0]+2*rSize,rSize)), f0_, fM*np.ones((f0.shape[0]+2*rSize,rSize))))
 
-if False:
-    radius = 6
-    ftrue = load_image("DFB_artificial_dataset/im2_original.bmp")
-    fSpars2 = deconvolution(f0, circular_blur, radius, options)
-    blindSSD = SSD(fSpars,ftrue)
-    nonBlindSSD = SSD(fSpars2,ftrue)
-    errorRatio = nonBlindSSD/blindSSD
-    print("Error ratio : " + str(errorRatio))
+#compute local scale
+D = 16#space between sampled points
+S = np.zeros((int(f0.shape[0]/D)+1,int(f0.shape[1]/D)+1,3))
+scales = np.array([1,3,7])
+for i in range(S.shape[0]):
+    print(i)
+    for j in range(S.shape[1]):
+        #point position
+        A = rSize+i*D
+        B = rSize+j*D
+        #window
+        fi = f0_[A-rSize:A+rSize, B-rSize:B+rSize]
+        for k,scale in enumerate(scales):
+            #cost measure for kth scale
+            S[i,j,k] = L1L2(BlurredLaplacian(fi, scale))
 
+#extrapolation of the sampled results
+S_ = S
+S = np.zeros((f0.shape[0],f0.shape[1],3))
+for i in range(f0.shape[0]):
+    for j in range(f0.shape[1]):
+        S[i,j,:] = S_[int(np.floor(i/D)),int(np.floor(j/D)),:]
+
+#choose scale with a point wise minimum
+C = np.zeros(S[:,:,0].shape)
+for i in range(S.shape[0]):
+    for j in range(S.shape[1]):
+        C[i,j] = np.argmin(S[i,j,:])
+
+#show partitionning
+fb0 = np.zeros(f0.shape); fb0[C==0] = f0[C==0]
+fb1 = np.zeros(f0.shape); fb1[C==1] = f0[C==1]
+fb2 = np.zeros(f0.shape); fb2[C==2] = f0[C==2]
+plt.figure()
+plt.subplot(311)
+imageplot(fb0)
+plt.subplot(312)
+imageplot(fb1)
+plt.subplot(313)
+imageplot(fb2)
+
+
+#solve the problems at the differents scales
+fSpars = deconvolution_3Planes(f0, gaussian_blur, C, scales, options)
 
 #show blurred image
 plt.figure(figsize=(9,5))

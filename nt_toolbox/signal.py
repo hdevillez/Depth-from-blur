@@ -72,8 +72,10 @@ def gaussian_blur(f, sigma):
     %
     %   Copyright (c) 2007 Gabriel Peyre
     """
-    if sigma<=0:
+    if sigma<0:
         return;
+    if sigma==0:
+        return f;
     n = max(f.shape);
     t = np.concatenate( (np.arange(0,n/2+1), np.arange(-n/2,-1)) )
     [Y,X] = np.meshgrid(t,t)

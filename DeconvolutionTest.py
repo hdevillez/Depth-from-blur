@@ -24,12 +24,6 @@ def L1L2(fSpars):
 
     return L1/L2
 
-def BlurredLaplacian(f,r):
-    k = np.zeros(f.shape)
-    k[0,0] = -4; k[0,-1] = 1; k[-1,0] = 1; k[0,1] = 1; k[1,0] = 1;
-    k = gaussian_blur(k,r)
-    return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
-
 def correlation_transform(f,radius):
     # use it to compute an approximate measure of local correlation
     n = max(f.shape);
@@ -95,12 +89,10 @@ def deconvolution_adaptativeLambda(f, kernel, scale, options):
     return fSpars
 
 def deconvolution_unknown_scale(f, kernel, options):
-    scales = np.linspace(0.1,15,50)
+    scales = np.linspace(1,10,10)
 
     J = np.zeros(scales.shape)
 
-    '''
-    #first version
     for i, scale in enumerate(scales):
         #test ith scale
         fSpars = deconvolution(f, kernel, scale, options)
@@ -117,11 +109,6 @@ def deconvolution_unknown_scale(f, kernel, options):
         plt.xlabel('$\sigma$')
         plt.ylabel('$L_1/L_2( I(\sigma) )$')
         plt.show()
-    '''
-
-    for i,scale in enumerate(scales):
-        fL = BlurredLaplacian(f0, scale)
-        J[i] = L1L2(fL)
 
     #optimal scale
     scale = scales[np.argmin(J)]
@@ -139,18 +126,41 @@ def circular_blur(f,radius):
     k = k/np.sum(k)
     return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
 
+def BlurredLaplacian(f,r):
+    n = max(f.shape);
+    t = np.concatenate( (np.arange(0,n/2+1), np.arange(-n/2,-1)) )
+    [Y,X] = np.meshgrid(t,t)
+    k = np.zeros(Y.shape)
+    k[0,0] = -4; k[0,-1] = 1; k[-1,0] = 1; k[0,1] = 1; k[1,0] = 1;
+    k = gaussian_blur(k,r)
+    k = k/np.sum(np.abs(k))
+    return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
 
-f0 = load_image("DFB_artificial_dataset/im0_blurry.bmp")
+
+f0 = load_image("DFB_artificial_dataset/im8_blurry.bmp")
+
+L1L2tab = np.zeros(15)
+for i in range(15):
+    fL = BlurredLaplacian(f0,i+1)
+    print(L1L2(fL))
+    L1L2tab[i] = L1L2(fL)
+    #print(np.var(fL))
+
+print("Best L1/L2 : " + str(np.argmin(L1L2tab)+1))
+'''
+imageplot(fL)
+plt.show()
+'''
 
 options = {}
 options['verbose'] = True
 
 
-fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
+#fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
 
-#scale = 3
+scale = np.argmin(L1L2tab)+1
 #fSpars = deconvolution_adaptativeLambda(f0, gaussian_blur, scale, options)
-#fSpars = deconvolution(f0, gaussian_blur, scale, options)
+fSpars = deconvolution(f0, gaussian_blur, scale, options)
 
 if False:
     radius = 6

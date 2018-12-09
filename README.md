@@ -11,3 +11,8 @@ The minimization is done with an enumerative search over the kernel size, each t
 It then re-solve the inverse problem for the optimal kernel size.
 
 Inverse problems are solved using the soft-threshold method.
+
+
+install cvxopt with glpk support in conda
+conda install -c conda-forge glpk=4.60
+conda install -c conda-forge cvxopt=1.1.7
