@@ -14,24 +14,7 @@ def SSD(x,y):
     """ Sum of square differences """
     return np.sum((x-y)**2)
 
-def L1L2(fSpars):
-	#Blind Deconvolution Using a Normalized Sparsity Measure by Krishnan, Tay and Fergus
-	#L1/L2
-    Grad = lambda f: (np.abs(f[:,0:-1]-f[:,1:]), np.abs(f[0:-1,:]-f[1:,:]))
-    G = Grad(fSpars)#gradient of the image solution along x and y
-    L1 = np.sum(np.abs(G[0]))+np.sum(np.abs(G[1]))
-    L2 = np.sqrt(np.sum(G[0]**2)+np.sum(G[1]**2))
-
-    return L1/L2
-
-def BlurredLaplacian(f,r):
-    k = np.zeros(f.shape)
-    k[0,0] = -4; k[0,-1] = 1; k[-1,0] = 1; k[0,1] = 1; k[1,0] = 1;
-    k = gaussian_blur(k,r)
-    return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
-
 def correlation_transform(f,radius):
-    # use it to compute an approximate measure of local correlation
     n = max(f.shape);
     t = np.concatenate( (np.arange(0,n/2+1), np.arange(-n/2,-1)) )
     [Y,X] = np.meshgrid(t,t)
@@ -44,10 +27,20 @@ def correlation_transform(f,radius):
 
 def whiteness(r):
     # measure the whiteness in the residual r, lower is better (more white)
-    r = (r-np.mean(r))/np.sqrt(np.var(r))
-    return np.abs(np.sum(np.multiply(r, correlation_transform(r, 10))))
+    r_norm = r#/np.var(r)
+    return np.abs(np.sum(np.multiply(r_norm, correlation_transform(r_norm, 10))))
 
-def deconvolution(f0, kernel, scale, options, lmbd=0.01):
+def cost(f0, fSpars, Phi):
+	#Blind Deconvolution Using a Normalized Sparsity Measure by Krishnan, Tay and Fergus
+	#L1/L2
+    Grad = lambda f: (np.abs(f[:,0:-1]-f[:,1:]), np.abs(f[0:-1,:]-f[1:,:]))
+    G = Grad(fSpars)#gradient of the image solution along x and y
+    L1 = np.sum(np.abs(G[0]))+np.sum(np.abs(G[1]))
+    L2 = np.sqrt(np.sum(G[0]**2)+np.sum(G[1]**2))
+
+    return L1/L2
+
+def deconvolution_adaptativeLambda(f, kernel, scale, options):
 
     # define wavelet transform and inverse wavelet transform functions
     PsiS = lambda f: perform_wavelet_transf(f,3, +1, ti=1)
@@ -60,14 +53,37 @@ def deconvolution(f0, kernel, scale, options, lmbd=0.01):
     #the linear blur operation
     Phi = lambda x: kernel(x, scale)
 
-    #optimization
-    #lmbd = 0.01
+    lmbds = np.exp(np.linspace(-11,-2,10))
+    W = np. zeros(lmbds.shape)
+    for i,lmbd in enumerate(lmbds):
+        #optimization
+        #lmbd = 0.01
+        tau = 1.5
+        niter = 20
+        a = PsiS(f0)#np.zeros(PsiS(f0).shape)
+        for iter in range(niter):
+            #if(options['verbose']): print(cost(f0, Psi(a), Phi))
+
+            #gradient step
+            a = np.add(a, tau*PsiS(Phi(f0-Phi(Psi(a)))))
+            #soft-threshold step
+            a = SoftThresh(a, lmbd*tau )
+
+            #imageplot(Psi(a)-f0, 'Image')
+            #plt.show()
+
+        W[i] = whiteness(Phi(Psi(a))-f0)
+        print("Lambda : " + str(lmbd))
+        print("Residual whiteness : " + str(whiteness(Phi(Psi(a))-f0)))
+        print()
+            #print("SSD : " + str(SSD(Phi(Psi(a)),f0)))
+
+    lmbd = lmbds[np.argmin(W)]
+    print("Choosen lambda : "+str(lmbd))
     tau = 1.5
     niter = 20
-    a = PsiS(f0)
+    a = PsiS(f0)#np.zeros(PsiS(f0).shape)
     for iter in range(niter):
-        #if(options['verbose']): print(cost(f0, Psi(a), Phi))
-
         #gradient step
         a = np.add(a, tau*PsiS(Phi(f0-Phi(Psi(a)))))
         #soft-threshold step
@@ -75,36 +91,15 @@ def deconvolution(f0, kernel, scale, options, lmbd=0.01):
 
     return Psi(a)
 
-def deconvolution_adaptativeLambda(f, kernel, scale, options):
-    """
-        make a search on the lambda value to get a residual as decorrelated as possible
-        Parameter estimation for blind and nonblind deconvolution using residual whiteness
-    """
-    lmbds = np.exp(np.linspace(-6,-3,10))
-    W = np. zeros(lmbds.shape)
-    for i,lmbd in enumerate(lmbds):
-        fSpars = deconvolution(f, kernel, scale, options, lmbd=lmbd)
-        W[i] = whiteness(kernel(fSpars, scale)-f0)
-        print("Lambda : "+str(lmbd)+"\tWhiteness : "+str(W[i]))
-
-    lmbd = lmbds[np.argmin(W)]
-    if(options['verbose']): print("Choosen lambda : "+str(lmbd))
-
-    fSpars = deconvolution(f, kernel, scale, options, lmbd=lmbd)
-
-    return fSpars
-
 def deconvolution_unknown_scale(f, kernel, options):
-    scales = np.linspace(0.1,15,50)
+    scales = np.linspace(1,10,10)
 
     J = np.zeros(scales.shape)
 
-    '''
-    #first version
     for i, scale in enumerate(scales):
         #test ith scale
         fSpars = deconvolution(f, kernel, scale, options)
-        J[i] = L1L2(fSpars)
+        J[i] = cost(f0, fSpars, lambda x : kernel(x, scale))
 
 
         if(options['verbose']): print('Cost for scale %f : %f' % (scale, J[i]))
@@ -117,11 +112,6 @@ def deconvolution_unknown_scale(f, kernel, options):
         plt.xlabel('$\sigma$')
         plt.ylabel('$L_1/L_2( I(\sigma) )$')
         plt.show()
-    '''
-
-    for i,scale in enumerate(scales):
-        fL = BlurredLaplacian(f0, scale)
-        J[i] = L1L2(fL)
 
     #optimal scale
     scale = scales[np.argmin(J)]
@@ -140,17 +130,16 @@ def circular_blur(f,radius):
     return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
 
 
-f0 = load_image("DFB_artificial_dataset/im15_blurry.bmp")
-
+f0 = load_image("DFB_artificial_dataset/im5_blurry.bmp")
+print(whiteness(f0))
 options = {}
 options['verbose'] = True
 
 
 #fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
 
-scale = 5
-#fSpars = deconvolution_adaptativeLambda(f0, gaussian_blur, scale, options)
-fSpars = deconvolution(f0, gaussian_blur, scale, options)
+scale = 4
+fSpars = deconvolution_adaptativeLambda(f0, gaussian_blur, scale, options)
 
 if False:
     radius = 6

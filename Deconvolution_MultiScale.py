@@ -2,12 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pywt
 import pylab
+from sklearn.cluster import KMeans
 
 from nt_toolbox.general import *
 from nt_toolbox.signal import *
 from nt_toolbox.perform_wavelet_transf import *
 """
-    Load an image and solve the inverse problem
+    Load an image and solve the inverse problem in the MultiScales setting
 """
 
 def SSD(x,y):
@@ -61,16 +62,18 @@ def deconvolution(f0, kernel, scale, options, lmbd=0.01):
     Phi = lambda x: kernel(x, scale)
 
     #optimization
-    tau = 1.5
-    niter = 20
+    tau = 1
+    niter = 30
     a = PsiS(f0)
     for iter in range(niter):
-        #if(options['verbose']): print(cost(f0, Psi(a), Phi))
-
         #gradient step
         a = np.add(a, tau*PsiS(Phi(f0-Phi(Psi(a)))))
         #soft-threshold step
         a = SoftThresh(a, lmbd*tau )
+
+        if iter%5==0:
+            print("Iteration : "+str(iter)+"\tCost : "+
+                str((np.sum((f0-Phi(Psi(a)))**2) + lmbd*np.sum(np.abs(a)))*1e-4) )
 
     return Psi(a)
 
@@ -79,8 +82,11 @@ def deconvolution_3Planes(f0, kernel, C, scales, options, lmbd=0.01):
         Apply three deconvolution operations for the three different scale and
         reconstruct a full result given the partionning in C
     """
+    print("First scale optimization")
     fs0 = deconvolution(f0, kernel, scales[0], options, lmbd)
+    print("Second scale optimization")
     fs1 = deconvolution(f0, kernel, scales[1], options, lmbd)
+    print("Third scale optimization")
     fs2 = deconvolution(f0, kernel, scales[2], options, lmbd)
 
     fs = np.zeros(f0.shape)
@@ -135,13 +141,10 @@ def circular_blur(f,radius):
     return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
 
 
-f0 = load_image("DFB_artificial_dataset/im0_blurry.bmp")
+f0 = load_image("DFB_artificial_dataset/im12_blurry.bmp")
 
 options = {}
 options['verbose'] = True
-
-
-fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
 
 #local scale estimation
 #construct padded image f0_ for border estimation
@@ -151,11 +154,11 @@ f0_ = np.vstack((fM*np.ones((rSize,f0.shape[1])), f0, fM*np.ones((rSize,f0.shape
 f0_ = np.hstack((fM*np.ones((f0.shape[0]+2*rSize,rSize)), f0_, fM*np.ones((f0.shape[0]+2*rSize,rSize))))
 
 #compute local scale
-D = 16#space between sampled points
-S = np.zeros((int(f0.shape[0]/D)+1,int(f0.shape[1]/D)+1,3))
-scales = np.array([1,3,7])
+D = 32#space between sampled points
+scales = np.array(list(range(11)))
+S = np.zeros((int(f0.shape[0]/D)+1,int(f0.shape[1]/D)+1,scales.shape[0]))
 for i in range(S.shape[0]):
-    print(i)
+    print("Sampling image : " + ('%.1f' % (100*i*D/f0.shape[0]))+ "%")
     for j in range(S.shape[1]):
         #point position
         A = rSize+i*D
@@ -166,31 +169,54 @@ for i in range(S.shape[0]):
             #cost measure for kth scale
             S[i,j,k] = L1L2(BlurredLaplacian(fi, scale))
 
-#extrapolation of the sampled results
-S_ = S
-S = np.zeros((f0.shape[0],f0.shape[1],3))
-for i in range(f0.shape[0]):
-    for j in range(f0.shape[1]):
-        S[i,j,:] = S_[int(np.floor(i/D)),int(np.floor(j/D)),:]
-
 #choose scale with a point wise minimum
 C = np.zeros(S[:,:,0].shape)
 for i in range(S.shape[0]):
     for j in range(S.shape[1]):
         C[i,j] = np.argmin(S[i,j,:])
 
+#histogram of the best scales
+plt.figure()
+plt.title("Estimated scales distribution on the image")
+plt.hist([scales[int(i)] for i in np.ravel(C)])
+plt.xlabel('$\sigma$')
+plt.ylabel('number of samples with estimated scale $\sigma$')
+
+#clustering to find the 3 best scales
+kmeans = KMeans(n_clusters=3, random_state=0).fit(
+    np.array([scales[int(i)] for i in np.ravel(C)]).reshape(-1,1))
+#reassignation to the cluster center
+scales = [a[0] for a in kmeans.cluster_centers_]
+indSort = np.argsort(scales)
+scales = np.sort(scales)
+print("Chosen scales : "+str(scales))
+labels = np.array([indSort[i] for i in kmeans.labels_])
+C = labels.reshape(C.shape)
+
+#extrapolation of the sampled results
+C_ = C
+C = np.zeros((f0.shape[0],f0.shape[1]))
+for i in range(f0.shape[0]):
+    for j in range(f0.shape[1]):
+        C[i,j] = C_[int(np.floor(i/D)),int(np.floor(j/D))]
+
 #show partitionning
 fb0 = np.zeros(f0.shape); fb0[C==0] = f0[C==0]
 fb1 = np.zeros(f0.shape); fb1[C==1] = f0[C==1]
 fb2 = np.zeros(f0.shape); fb2[C==2] = f0[C==2]
-plt.figure()
-plt.subplot(311)
+plt.figure(figsize=(9,5))
+plt.plot()
+plt.title("Partition of the image onto the different scales")
+plt.subplot(131)
 imageplot(fb0)
-plt.subplot(312)
+plt.title("$\sigma$="+('%.1f' % scales[0]))
+plt.subplot(132)
 imageplot(fb1)
-plt.subplot(313)
+plt.title("$\sigma$="+('%.1f' % scales[1]))
+plt.subplot(133)
 imageplot(fb2)
-
+plt.title("$\sigma$="+('%.1f' % scales[2]))
+plt.show()
 
 #solve the problems at the differents scales
 fSpars = deconvolution_3Planes(f0, gaussian_blur, C, scales, options)
@@ -202,5 +228,5 @@ imageplot(f0, 'Image')
 
 #show result
 plt.subplot(122)
-imageplot(fSpars, 'Image Deconvoluted')
+imageplot(fSpars, 'Image Deblurred')
 plt.show()
