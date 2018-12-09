@@ -3,16 +3,14 @@
 -to run Deconvolution.py, the pywavelets toolbox is needed
 conda install pywavelets
 
--Deconvolution.py is the main file
+-Deconvolution.py is the main file for single scale deblurring
+-Deconvolution_MultiScale is the main file for multi scale deblurring
 
-It find the optimum kernel size by minimizing J = L1(wavelet coefficients) / L2(wavelet coefficients)
-The minimization is done with an enumerative search over the kernel size, each time solving the inverse problem.
+It find the optimum kernel size by minimizing J = L1(Gradient of the input) / L2(Gradient of the input)
+where the input is the convolution of the blurred image with the laplacian operator and a blurring operator with a given scale.
+
+The minimization is done with an enumerative search over the kernel size.
 
 It then re-solve the inverse problem for the optimal kernel size.
 
 Inverse problems are solved using the soft-threshold method.
-
-
-install cvxopt with glpk support in conda
-conda install -c conda-forge glpk=4.60
-conda install -c conda-forge cvxopt=1.1.7
