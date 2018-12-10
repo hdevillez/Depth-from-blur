@@ -95,7 +95,7 @@ def deconvolution_adaptativeLambda(f, kernel, scale, options):
     return fSpars
 
 def deconvolution_unknown_scale(f, kernel, options):
-    scales = np.linspace(0.1,15,50)
+    scales = np.linspace(0.1,15,20)
 
     J = np.zeros(scales.shape)
 
@@ -122,6 +122,10 @@ def deconvolution_unknown_scale(f, kernel, options):
     for i,scale in enumerate(scales):
         fL = BlurredLaplacian(f0, scale)
         J[i] = L1L2(fL)
+        '''
+        print(J[i])
+        imageplot(fL)
+        plt.show()'''
 
     #optimal scale
     scale = scales[np.argmin(J)]
@@ -146,11 +150,11 @@ options = {}
 options['verbose'] = True
 
 
-#fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
+fSpars = deconvolution_unknown_scale(f0, gaussian_blur, options)
 
-scale = 5
+#scale = 4.6
 #fSpars = deconvolution_adaptativeLambda(f0, gaussian_blur, scale, options)
-fSpars = deconvolution(f0, gaussian_blur, scale, options)
+#fSpars = deconvolution(f0, gaussian_blur, scale, options)
 
 if False:
     radius = 6

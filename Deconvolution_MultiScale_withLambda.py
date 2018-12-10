@@ -48,6 +48,11 @@ def whiteness(r):
     r = (r-np.mean(r))/np.sqrt(np.var(r))
     return np.abs(np.sum(np.multiply(r, correlation_transform(r, 10))))
 
+def whiteness_withCache(r,C):
+    # measure the whiteness in the residual r, lower is better (more white)
+    r = (r-np.mean(r[C]))/np.sqrt(np.var(r[C]))
+    return np.abs(np.sum(np.multiply(r, correlation_transform(r, 10))[C]))
+
 def deconvolution(f0, kernel, scale, options, lmbd=0.01):
     print(scale)
     # define wavelet transform and inverse wavelet transform functions
@@ -72,7 +77,7 @@ def deconvolution(f0, kernel, scale, options, lmbd=0.01):
     print("L is : "+str(L))'''
 
     tau = 1.5
-    niter = 200
+    niter = 30
     a = PsiS(f0)
     for iter in range(niter):
         #gradient step
@@ -80,23 +85,23 @@ def deconvolution(f0, kernel, scale, options, lmbd=0.01):
         #soft-threshold step
         a = SoftThresh(a, lmbd*tau )
 
-        if iter%20==0:
+        '''if iter%50==0:
             print("Iteration : "+str(iter)+"\tCost : "+
-                '%.4f'%((np.sum((f0-Phi(Psi(a)))**2)/2 + lmbd*np.sum(np.abs(a)))*1e-4) )
+                '%.4f'%((np.sum((f0-Phi(Psi(a)))**2)/2 + lmbd*np.sum(np.abs(a)))*1e-4) )'''
 
     return Psi(a)
 
-def deconvolution_3Planes(f0, kernel, C, scales, options, lmbd=0.01):
+def deconvolution_3Planes(f0, kernel, C, scales, options):
     """
         Apply three deconvolution operations for the three different scale and
         reconstruct a full result given the partionning in C
     """
     print("First scale optimization")
-    fs0 = deconvolution(f0, kernel, scales[0], options, lmbd)
+    fs0 = deconvolution_adaptativeLambda_withCache(f0, kernel, scales[0], C==0, options)
     print("Second scale optimization")
-    fs1 = deconvolution(f0, kernel, scales[1], options, lmbd)
+    fs1 = deconvolution_adaptativeLambda_withCache(f0, kernel, scales[1], C==1, options)
     print("Third scale optimization")
-    fs2 = deconvolution(f0, kernel, scales[2], options, lmbd)
+    fs2 = deconvolution_adaptativeLambda_withCache(f0, kernel, scales[2], C==2, options)
 
     fs = np.zeros(f0.shape)
     fs[C==0] = fs0[C==0]
@@ -110,12 +115,31 @@ def deconvolution_adaptativeLambda(f, kernel, scale, options):
         make a search on the lambda value to get a residual as decorrelated as possible
         Parameter estimation for blind and nonblind deconvolution using residual whiteness
     """
-    lmbds = np.exp(np.linspace(-6,-3,10))
+    lmbds = np.exp(np.linspace(-6,-3,5))
     W = np. zeros(lmbds.shape)
     for i,lmbd in enumerate(lmbds):
         fSpars = deconvolution(f, kernel, scale, options, lmbd=lmbd)
         W[i] = whiteness(kernel(fSpars, scale)-f0)
-        print("Lambda : "+str(lmbd)+"\tWhiteness : "+str(W[i]))
+        print("Lambda : "+str(lmbd)+"\tWhiteness : "+ ('%.2f'%W[i]))
+
+    lmbd = lmbds[np.argmin(W)]
+    if(options['verbose']): print("Chosen lambda : "+str(lmbd))
+
+    fSpars = deconvolution(f, kernel, scale, options, lmbd=lmbd)
+
+    return fSpars
+
+def deconvolution_adaptativeLambda_withCache(f, kernel, scale, C, options):
+    """
+        make a search on the lambda value to get a residual as decorrelated as possible
+        Parameter estimation for blind and nonblind deconvolution using residual whiteness
+    """
+    lmbds = np.exp(np.linspace(-6,-3,5))
+    W = np. zeros(lmbds.shape)
+    for i,lmbd in enumerate(lmbds):
+        fSpars = deconvolution(f, kernel, scale, options, lmbd=lmbd)
+        W[i] = whiteness_withCache(kernel(fSpars, scale)-f0, C)
+        print("Lambda : "+str(lmbd)+"\tWhiteness : "+ ('%.2f'%W[i]))
 
     lmbd = lmbds[np.argmin(W)]
     if(options['verbose']): print("Choosen lambda : "+str(lmbd))
@@ -150,7 +174,7 @@ def circular_blur(f,radius):
     return np.real( pylab.ifft2(pylab.fft2(f) * pylab.fft2(k)) )
 
 
-f0 = load_image("DFB_artificial_dataset/im13_blurry.bmp")
+f0 = load_image("DFB_artificial_dataset/im15_blurry.bmp")
 
 options = {}
 options['verbose'] = True
@@ -163,7 +187,7 @@ f0_ = np.vstack((fM*np.ones((rSize,f0.shape[1])), f0, fM*np.ones((rSize,f0.shape
 f0_ = np.hstack((fM*np.ones((f0.shape[0]+2*rSize,rSize)), f0_, fM*np.ones((f0.shape[0]+2*rSize,rSize))))
 
 #compute local scale
-D = 32#space between sampled points
+D = 16#space between sampled points
 scales = np.array(list(range(11)))
 S = np.zeros((int(f0.shape[0]/D)+1,int(f0.shape[1]/D)+1,scales.shape[0]))
 for i in range(S.shape[0]):
